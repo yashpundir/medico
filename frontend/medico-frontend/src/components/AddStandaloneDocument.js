@@ -27,7 +27,7 @@ export default function AddStandaloneDocument() {
     if (cachedConditions) {
       setConditions(cachedConditions);
     }
-    fetch('http://localhost:8000/conditions')
+    fetch(`${process.env.REACT_APP_API_URL}/conditions`)
       .then(res => res.json())
       .then(data => {
         setConditions(data || []);
@@ -69,7 +69,7 @@ export default function AddStandaloneDocument() {
     formData.append('file', file);
 
     try {
-      await axios.post('http://localhost:8000/documents', formData, {
+      await axios.post(`${process.env.REACT_APP_API_URL}/documents`, formData, {
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);

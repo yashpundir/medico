@@ -16,7 +16,7 @@ export default function MedicationList() {
       setLoading(true);
     }
 
-    fetch('http://localhost:8000/medications')
+    fetch(`${process.env.REACT_APP_API_URL}/medications`)
       .then(res => res.json())
       .then(data => {
         setMedications(data || []);

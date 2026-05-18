@@ -26,7 +26,7 @@ export default function AddVisit() {
     if (cachedConditions) {
       setConditions(cachedConditions);
     }
-    fetch('http://localhost:8000/conditions')
+    fetch(`${process.env.REACT_APP_API_URL}/conditions`)
       .then(res => res.json())
       .then(data => {
         setConditions(data || []);
@@ -76,7 +76,7 @@ export default function AddVisit() {
       visitData.append('echs_referred', echsReferred);
       if (selectedConditions.length > 0) visitData.append('condition_ids', selectedConditions.join(','));
 
-      const visitRes = await fetch('http://localhost:8000/visits', {
+      const visitRes = await fetch(`${process.env.REACT_APP_API_URL}/visits`, {
         method: 'POST',
         body: visitData,
       });
@@ -96,7 +96,7 @@ export default function AddVisit() {
 
           setUploadProgress(prev => ({ ...prev, [i]: 0 }));
 
-          await axios.post('http://localhost:8000/documents', docData, {
+          await axios.post(`${process.env.REACT_APP_API_URL}/documents`, docData, {
             onUploadProgress: (progressEvent) => {
               const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
               setUploadProgress(prev => ({

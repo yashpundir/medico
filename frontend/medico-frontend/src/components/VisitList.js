@@ -29,7 +29,7 @@ export default function VisitList() {
       setConditions(cachedConditions);
     }
     
-    fetch('http://localhost:8000/conditions')
+    fetch(`${process.env.REACT_APP_API_URL}/conditions`)
       .then(res => res.json())
       .then(data => {
         setConditions(data || []);
@@ -56,7 +56,7 @@ export default function VisitList() {
       setLoadingVisits(true);
     }
 
-    fetch('http://localhost:8000/visits')
+    fetch(`${process.env.REACT_APP_API_URL}/visits`)
       .then(res => res.json())
       .then(data => {
         setVisits(data || []);
@@ -78,7 +78,7 @@ export default function VisitList() {
       setLoadingDocs(true);
     }
 
-    fetch('http://localhost:8000/standalone-documents')
+    fetch(`${process.env.REACT_APP_API_URL}/standalone-documents`)
       .then(res => res.json())
       .then(data => {
         setDocuments(data || []);
@@ -94,7 +94,7 @@ export default function VisitList() {
   const handleDeleteDocument = async (id) => {
     if (!window.confirm("Are you sure you want to delete this standalone document?")) return;
     try {
-      const res = await fetch(`http://localhost:8000/documents/${id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/documents/${id}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error("Failed to delete document");

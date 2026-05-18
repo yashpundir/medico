@@ -34,7 +34,7 @@ export default function Conditions() {
       setLoading(true);
     }
 
-    fetch('http://localhost:8000/conditions')
+    fetch(`${process.env.REACT_APP_API_URL}/conditions`)
       .then(res => res.json())
       .then(data => {
         setConditions(data || []);
@@ -60,7 +60,7 @@ export default function Conditions() {
     if (newDiagnosedOn) formData.append('diagnosed_on', newDiagnosedOn);
     
     try {
-      const res = await fetch('http://localhost:8000/conditions', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/conditions`, {
         method: 'POST',
         body: formData
       });
@@ -102,7 +102,7 @@ export default function Conditions() {
     formData.append('diagnosed_on', editDiagnosedOn);
     
     try {
-      const res = await fetch(`http://localhost:8000/conditions/${id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/conditions/${id}`, {
         method: 'PUT',
         body: formData
       });
@@ -126,7 +126,7 @@ export default function Conditions() {
     setFeedback(null);
     
     try {
-      const res = await fetch(`http://localhost:8000/conditions/${id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/conditions/${id}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error("Failed to delete condition");

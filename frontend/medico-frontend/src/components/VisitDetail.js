@@ -35,14 +35,14 @@ export default function VisitDetail() {
   useEffect(() => {
     fetchVisit();
     // Load all conditions for editing dropdowns
-    fetch('http://localhost:8000/conditions')
+    fetch(`${process.env.REACT_APP_API_URL}/conditions`)
       .then(res => res.json())
       .then(data => setAllConditions(data || []))
       .catch(err => console.error("Error fetching conditions directory", err));
   }, [id]);
 
   const fetchVisit = () => {
-    fetch(`http://localhost:8000/visits/${id}`)
+    fetch(`${process.env.REACT_APP_API_URL}/visits/${id}`)
       .then(res => res.json())
       .then(data => {
         setVisit(data);
@@ -77,7 +77,7 @@ export default function VisitDetail() {
       formData.append('echs_referred', editEchs);
       formData.append('condition_ids', editConditions.join(','));
 
-      const res = await fetch(`http://localhost:8000/visits/${id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/visits/${id}`, {
         method: 'PUT',
         body: formData
       });
@@ -97,7 +97,7 @@ export default function VisitDetail() {
   const handleDeleteVisit = async () => {
     if (!window.confirm("Are you sure you want to permanently delete this entire medical visit and all its attached records?")) return;
     try {
-      const res = await fetch(`http://localhost:8000/visits/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/visits/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error("Failed to delete visit");
       
       setFeedback({ type: 'success', message: 'Visit deleted successfully!' });
@@ -125,7 +125,7 @@ export default function VisitDetail() {
       if (visit.doctor_name) formData.append('prescribed_by', visit.doctor_name);
       formData.append('prescribed_on', visit.date);
       
-      const res = await fetch('http://localhost:8000/medications', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/medications`, {
         method: 'POST',
         body: formData
       });
@@ -150,7 +150,7 @@ export default function VisitDetail() {
     if (!window.confirm("Are you sure you want to delete this document?")) return;
     setFeedback(null);
     try {
-      const res = await fetch(`http://localhost:8000/documents/${docId}`, { method: 'DELETE' });
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/documents/${docId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete document');
       setFeedback({ type: 'success', message: 'Document removed successfully!' });
       cache.clear('visits');
