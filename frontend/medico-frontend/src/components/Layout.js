@@ -1,13 +1,12 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Activity, PlusCircle, ClipboardList, Pill } from 'lucide-react';
+import { Activity, ClipboardList, Pill } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
   
   const navItems = [
     { name: 'Visits', path: '/', icon: ClipboardList },
-    { name: 'Add Visit', path: '/add-visit', icon: PlusCircle },
     { name: 'Conditions', path: '/conditions', icon: Activity },
     { name: 'Medications', path: '/medications', icon: Pill },
   ];

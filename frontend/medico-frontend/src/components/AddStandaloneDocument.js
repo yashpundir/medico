@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Calendar, Tag, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import axios from 'axios';
+import cache from '../utils/cache';
 
 export default function AddStandaloneDocument() {
   const navigate = useNavigate();
-  const [conditions, setConditions] = useState([]);
+  const [conditions, setConditions] = useState(cache.get('conditions') || []);
   
   // Form state
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -17,11 +19,20 @@ export default function AddStandaloneDocument() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    const cachedConditions = cache.get('conditions');
+    if (cachedConditions) {
+      setConditions(cachedConditions);
+    }
     fetch('http://localhost:8000/conditions')
       .then(res => res.json())
-      .then(data => setConditions(data || []))
+      .then(data => {
+        setConditions(data || []);
+        cache.set('conditions', data || []);
+      })
       .catch(err => console.error("Error loading conditions", err));
   }, []);
 
@@ -45,8 +56,10 @@ export default function AddStandaloneDocument() {
     }
 
     setSaving(true);
+    setUploading(true);
     setError(null);
     setSuccess(null);
+    setUploadProgress(0);
 
     const formData = new FormData();
     formData.append('type', type);
@@ -56,14 +69,12 @@ export default function AddStandaloneDocument() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:8000/documents', {
-        method: 'POST',
-        body: formData
+      await axios.post('http://localhost:8000/documents', formData, {
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        }
       });
-
-      if (!res.ok) {
-        throw new Error("Failed to upload document");
-      }
 
       setSuccess("Document uploaded successfully!");
       // Reset form
@@ -72,16 +83,21 @@ export default function AddStandaloneDocument() {
       setSelectedConditions([]);
       setNotes('');
       setFile(null);
+      setUploadProgress(0);
       
+      // Invalidate standalone documents cache
+      cache.clear('standaloneDocs');
+
       // Redirect after a short delay
       setTimeout(() => {
         navigate('/');
       }, 1500);
 
     } catch (err) {
-      setError(err.message || "An unexpected error occurred during upload.");
+      setError(err.response?.data?.detail || err.message || "An unexpected error occurred during upload.");
     } finally {
       setSaving(false);
+      setUploading(false);
     }
   };
 
@@ -213,6 +229,22 @@ export default function AddStandaloneDocument() {
             </div>
           </div>
         </div>
+
+        {/* Progress Bar */}
+        {uploading && (
+          <div className="w-full bg-slate-50 p-4 border border-slate-200 rounded-md">
+            <div className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
+              <span>Uploading File...</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out" 
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-4 pt-4 border-t border-slate-100">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, Activity, FileText, Pill, Trash2, Edit3, CheckCircle, AlertCircle, Save, X, Plus } from 'lucide-react';
+import cache from '../utils/cache';
 
 export default function VisitDetail() {
   const { id } = useParams();
@@ -85,6 +86,7 @@ export default function VisitDetail() {
       
       setFeedback({ type: 'success', message: 'Visit updated successfully!' });
       setIsEditing(false);
+      cache.clear('visits');
       fetchVisit();
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {
@@ -99,6 +101,8 @@ export default function VisitDetail() {
       if (!res.ok) throw new Error("Failed to delete visit");
       
       setFeedback({ type: 'success', message: 'Visit deleted successfully!' });
+      cache.clear('visits');
+      cache.clear('medications');
       setTimeout(() => {
         navigate('/');
       }, 1500);
@@ -132,6 +136,7 @@ export default function VisitDetail() {
       setMedFreq('');
       setMedUntil('');
       setFeedback({ type: 'success', message: 'Medication added successfully!' });
+      cache.clear('medications');
       fetchVisit(); // refresh data
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {
@@ -148,6 +153,7 @@ export default function VisitDetail() {
       const res = await fetch(`http://localhost:8000/documents/${docId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete document');
       setFeedback({ type: 'success', message: 'Document removed successfully!' });
+      cache.clear('visits');
       fetchVisit(); // refresh
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {

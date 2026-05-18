@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FileText, Calendar, MapPin, ChevronRight, Download, Trash2, Tag, Activity } from 'lucide-react';
+import cache from '../utils/cache';
 
 export default function VisitList() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('visits');
-  const [visits, setVisits] = useState([]);
-  const [loadingVisits, setLoadingVisits] = useState(true);
+  const [visits, setVisits] = useState(cache.get('visits') || []);
+  const [loadingVisits, setLoadingVisits] = useState(!cache.get('visits'));
   
   // Standalone Document states
-  const [documents, setDocuments] = useState([]);
-  const [loadingDocs, setLoadingDocs] = useState(false);
-  const [conditions, setConditions] = useState([]);
+  const [documents, setDocuments] = useState(cache.get('standaloneDocs') || []);
+  const [loadingDocs, setLoadingDocs] = useState(activeTab === 'documents' && !cache.get('standaloneDocs'));
+  const [conditions, setConditions] = useState(cache.get('conditions') || []);
   
   // Feedback
   const [feedback, setFeedback] = useState(null);
@@ -22,10 +23,18 @@ export default function VisitList() {
       setTimeout(() => setFeedback(null), 4000);
     }
 
-    // Always fetch conditions so we can resolve tags
+    // Always fetch conditions to resolve tags, using cache first
+    const cachedConditions = cache.get('conditions');
+    if (cachedConditions) {
+      setConditions(cachedConditions);
+    }
+    
     fetch('http://localhost:8000/conditions')
       .then(res => res.json())
-      .then(data => setConditions(data || []))
+      .then(data => {
+        setConditions(data || []);
+        cache.set('conditions', data || []);
+      })
       .catch(err => console.error("Failed to load conditions", err));
 
     fetchVisits();
@@ -38,11 +47,19 @@ export default function VisitList() {
   }, [activeTab]);
 
   const fetchVisits = () => {
-    setLoadingVisits(true);
+    const cachedVisits = cache.get('visits');
+    if (cachedVisits) {
+      setVisits(cachedVisits);
+      setLoadingVisits(false);
+    } else {
+      setLoadingVisits(true);
+    }
+
     fetch('http://localhost:8000/visits')
       .then(res => res.json())
       .then(data => {
         setVisits(data || []);
+        cache.set('visits', data || []);
         setLoadingVisits(false);
       })
       .catch(err => {
@@ -52,11 +69,19 @@ export default function VisitList() {
   };
 
   const fetchDocuments = () => {
-    setLoadingDocs(true);
+    const cachedDocs = cache.get('standaloneDocs');
+    if (cachedDocs) {
+      setDocuments(cachedDocs);
+      setLoadingDocs(false);
+    } else {
+      setLoadingDocs(true);
+    }
+
     fetch('http://localhost:8000/standalone-documents')
       .then(res => res.json())
       .then(data => {
         setDocuments(data || []);
+        cache.set('standaloneDocs', data || []);
         setLoadingDocs(false);
       })
       .catch(err => {
@@ -73,6 +98,7 @@ export default function VisitList() {
       });
       if (!res.ok) throw new Error("Failed to delete document");
       setFeedback({ type: 'success', message: 'Document deleted successfully!' });
+      cache.clear('standaloneDocs');
       fetchDocuments();
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {

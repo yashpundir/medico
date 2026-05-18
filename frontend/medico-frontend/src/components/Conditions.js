@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Tag, Activity, Edit2, Trash2, CheckCircle, AlertCircle, X, Check } from 'lucide-react';
+import cache from '../utils/cache';
 
 export default function Conditions() {
-  const [conditions, setConditions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [conditions, setConditions] = useState(cache.get('conditions') || []);
+  const [loading, setLoading] = useState(!cache.get('conditions'));
   
   // New Condition State
   const [newName, setNewName] = useState('');
@@ -25,11 +26,19 @@ export default function Conditions() {
   }, []);
 
   const fetchConditions = () => {
-    setLoading(true);
+    const cachedConditions = cache.get('conditions');
+    if (cachedConditions) {
+      setConditions(cachedConditions);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch('http://localhost:8000/conditions')
       .then(res => res.json())
       .then(data => {
         setConditions(data || []);
+        cache.set('conditions', data || []);
         setLoading(false);
       })
       .catch(err => {
@@ -60,6 +69,7 @@ export default function Conditions() {
       setFeedback({ type: 'success', message: `Condition "${newName}" added successfully!` });
       setNewName('');
       setNewDiagnosedOn('');
+      cache.clear('conditions');
       fetchConditions();
       
       setTimeout(() => setFeedback(null), 3000);
@@ -100,6 +110,7 @@ export default function Conditions() {
       
       setFeedback({ type: 'success', message: 'Condition updated successfully!' });
       setEditingId(null);
+      cache.clear('conditions');
       fetchConditions();
       
       setTimeout(() => setFeedback(null), 3000);
@@ -121,6 +132,7 @@ export default function Conditions() {
       if (!res.ok) throw new Error("Failed to delete condition");
       
       setFeedback({ type: 'success', message: `Condition "${name}" deleted successfully!` });
+      cache.clear('conditions');
       fetchConditions();
       
       setTimeout(() => setFeedback(null), 3000);

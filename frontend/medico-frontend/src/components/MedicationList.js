@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Pill } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import cache from '../utils/cache';
 
 export default function MedicationList() {
-  const [medications, setMedications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [medications, setMedications] = useState(cache.get('medications') || []);
+  const [loading, setLoading] = useState(!cache.get('medications'));
 
   useEffect(() => {
+    const cachedMeds = cache.get('medications');
+    if (cachedMeds) {
+      setMedications(cachedMeds);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch('http://localhost:8000/medications')
       .then(res => res.json())
       .then(data => {
         setMedications(data || []);
+        cache.set('medications', data || []);
         setLoading(false);
       })
       .catch(err => {
@@ -19,7 +29,7 @@ export default function MedicationList() {
       });
   }, []);
 
-  if (loading) return <div className="p-8 text-center text-slate-500">Loading medications...</div>;
+  if (loading && medications.length === 0) return <div className="p-8 text-center text-slate-500">Loading medications...</div>;
 
   return (
     <div className="space-y-6">

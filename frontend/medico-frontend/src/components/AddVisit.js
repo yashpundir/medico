@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import cache from '../utils/cache';
 
 export default function AddVisit() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -9,19 +11,27 @@ export default function AddVisit() {
   const [reason, setReason] = useState('');
   const [echsReferred, setEchsReferred] = useState(false);
   
-  const [conditions, setConditions] = useState([]);
+  const [conditions, setConditions] = useState(cache.get('conditions') || []);
   const [selectedConditions, setSelectedConditions] = useState([]);
   
   const [documents, setDocuments] = useState([{ file: null, type: 'prescription', notes: '' }]);
+  const [uploadProgress, setUploadProgress] = useState({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
+    const cachedConditions = cache.get('conditions');
+    if (cachedConditions) {
+      setConditions(cachedConditions);
+    }
     fetch('http://localhost:8000/conditions')
       .then(res => res.json())
-      .then(data => setConditions(data))
+      .then(data => {
+        setConditions(data || []);
+        cache.set('conditions', data || []);
+      })
       .catch(err => console.error("Failed to load conditions:", err));
   }, []);
 
@@ -37,6 +47,11 @@ export default function AddVisit() {
   
   const removeDocField = (index) => {
     setDocuments(documents.filter((_, i) => i !== index));
+    setUploadProgress(prev => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
   };
 
   const handleConditionToggle = (id) => {
@@ -49,6 +64,8 @@ export default function AddVisit() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setUploadProgress({});
+    
     try {
       const visitData = new FormData();
       visitData.append('date', date);
@@ -67,7 +84,9 @@ export default function AddVisit() {
       if (!visitRes.ok) throw new Error('Failed to create visit');
       const visit = await visitRes.json();
 
-      for (const doc of documents) {
+      // Upload all attached files using Axios for real-time progress updates
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
         if (doc.file) {
           const docData = new FormData();
           docData.append('visit_id', visit.id);
@@ -75,13 +94,23 @@ export default function AddVisit() {
           if (doc.notes) docData.append('notes', doc.notes);
           docData.append('file', doc.file);
 
-          const docRes = await fetch('http://localhost:8000/documents', {
-            method: 'POST',
-            body: docData,
+          setUploadProgress(prev => ({ ...prev, [i]: 0 }));
+
+          await axios.post('http://localhost:8000/documents', docData, {
+            onUploadProgress: (progressEvent) => {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(prev => ({
+                ...prev,
+                [i]: percentCompleted
+              }));
+            }
           });
-          if (!docRes.ok) throw new Error('Failed to upload document');
         }
       }
+
+      // Invalidate both lists caches since we added a visit (which can hold medications)
+      cache.clear('visits');
+      cache.clear('medications');
 
       navigate('/', { state: { message: "Visit logged successfully!" } });
     } catch (err) {
@@ -168,30 +197,47 @@ export default function AddVisit() {
           
           <div className="space-y-4">
             {documents.map((doc, index) => (
-              <div key={index} className="flex flex-col md:flex-row gap-4 p-4 border border-slate-200 rounded-md bg-slate-50">
-                <div className="flex-1">
-                  <input type="file" onChange={(e) => handleDocChange(index, 'file', e.target.files[0])}
-                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+              <div key={index} className="flex flex-col p-4 border border-slate-200 rounded-md bg-slate-50 gap-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
+                    <input type="file" onChange={(e) => handleDocChange(index, 'file', e.target.files[0])}
+                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                  </div>
+                  <div className="flex-1">
+                    <select value={doc.type} onChange={(e) => handleDocChange(index, 'type', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
+                      <option value="prescription">Prescription</option>
+                      <option value="lab_report">Lab Report</option>
+                      <option value="scan">Scan / X-Ray</option>
+                      <option value="referral">Referral</option>
+                      <option value="discharge_summary">Discharge Summary</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <input type="text" placeholder="Short note (optional)" value={doc.notes} onChange={(e) => handleDocChange(index, 'notes', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+                  </div>
+                  {documents.length > 1 && (
+                    <button type="button" onClick={() => removeDocField(index)} className="text-red-500 hover:text-red-700 p-2">
+                      &times;
+                    </button>
+                  )}
                 </div>
-                <div className="flex-1">
-                  <select value={doc.type} onChange={(e) => handleDocChange(index, 'type', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm">
-                    <option value="prescription">Prescription</option>
-                    <option value="lab_report">Lab Report</option>
-                    <option value="scan">Scan / X-Ray</option>
-                    <option value="referral">Referral</option>
-                    <option value="discharge_summary">Discharge Summary</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <input type="text" placeholder="Short note (optional)" value={doc.notes} onChange={(e) => handleDocChange(index, 'notes', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
-                </div>
-                {documents.length > 1 && (
-                  <button type="button" onClick={() => removeDocField(index)} className="text-red-500 hover:text-red-700 p-2">
-                    &times;
-                  </button>
+
+                {uploadProgress[index] !== undefined && (
+                  <div className="w-full border-t border-slate-200 pt-3">
+                    <div className="flex justify-between text-xs text-slate-600 font-semibold mb-1">
+                      <span>Uploading document...</span>
+                      <span>{uploadProgress[index]}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${uploadProgress[index]}%` }}
+                      ></div>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
