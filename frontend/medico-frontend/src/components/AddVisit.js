@@ -83,7 +83,7 @@ export default function AddVisit() {
         }
       }
 
-      navigate('/');
+      navigate('/', { state: { message: "Visit logged successfully!" } });
     } catch (err) {
       setError(err.message);
     } finally {

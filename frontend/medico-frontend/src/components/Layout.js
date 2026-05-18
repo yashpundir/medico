@@ -8,7 +8,7 @@ export default function Layout() {
   const navItems = [
     { name: 'Visits', path: '/', icon: ClipboardList },
     { name: 'Add Visit', path: '/add-visit', icon: PlusCircle },
-    { name: 'Add Condition', path: '/add-condition', icon: Activity },
+    { name: 'Conditions', path: '/conditions', icon: Activity },
     { name: 'Medications', path: '/medications', icon: Pill },
   ];
 

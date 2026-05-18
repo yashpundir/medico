@@ -4,7 +4,8 @@ import Layout from './components/Layout';
 import VisitList from './components/VisitList';
 import VisitDetail from './components/VisitDetail';
 import AddVisit from './components/AddVisit';
-import AddCondition from './components/AddCondition';
+import Conditions from './components/Conditions';
+import AddStandaloneDocument from './components/AddStandaloneDocument';
 import MedicationList from './components/MedicationList';
 
 function App() {
@@ -15,7 +16,8 @@ function App() {
           <Route index element={<VisitList />} />
           <Route path="visits/:id" element={<VisitDetail />} />
           <Route path="add-visit" element={<AddVisit />} />
-          <Route path="add-condition" element={<AddCondition />} />
+          <Route path="conditions" element={<Conditions />} />
+          <Route path="standalone-upload" element={<AddStandaloneDocument />} />
           <Route path="medications" element={<MedicationList />} />
         </Route>
       </Routes>

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import os
 import uuid
+import json
 
 load_dotenv()
 
@@ -21,6 +22,30 @@ supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_SECRET_KEY")
 )
+
+def sign_document_url(doc: dict) -> dict:
+    if doc.get("file_url"):
+        filename = doc["file_url"].split("/")[-1]
+        storage_path = f"documents/{filename}"
+        try:
+            signed_url_resp = supabase.storage.from_("documents").create_signed_url(storage_path, 3600)
+            doc["file_url"] = signed_url_resp.get("signedUrl") or signed_url_resp.get("signedURL")
+        except Exception as e:
+            print(f"Error generating signed URL for {filename}: {e}")
+    return doc
+
+def sign_and_parse_document(doc: dict) -> dict:
+    doc = sign_document_url(doc)
+    if not doc.get("visit_id") and doc.get("notes"):
+        try:
+            data = json.loads(doc["notes"])
+            if isinstance(data, dict) and ("date" in data or "condition_ids" in data):
+                doc["date"] = data.get("date")
+                doc["condition_ids"] = data.get("condition_ids", [])
+                doc["notes"] = data.get("notes", "")
+        except Exception:
+            pass
+    return doc
 
 @app.get("/")
 def root():
@@ -41,6 +66,29 @@ def create_condition(name: str = Form(...), status: str = Form("active"), diagno
         data["diagnosed_on"] = diagnosed_on
     response = supabase.table("conditions").insert(data).execute()
     return response.data
+
+@app.put("/conditions/{id}")
+def update_condition(
+    id: str,
+    name: str = Form(None),
+    status: str = Form(None),
+    diagnosed_on: str = Form(None)
+):
+    update_data = {}
+    if name is not None: update_data["name"] = name
+    if status is not None: update_data["status"] = status
+    if diagnosed_on is not None: update_data["diagnosed_on"] = diagnosed_on
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+        
+    resp = supabase.table("conditions").update(update_data).eq("id", id).execute()
+    return resp.data
+
+@app.delete("/conditions/{id}")
+def delete_condition(id: str):
+    resp = supabase.table("conditions").delete().eq("id", id).execute()
+    return resp.data
 
 
 # --- VISITS ---
@@ -68,7 +116,7 @@ def get_visit(id: str):
     visit = visit_resp.data[0]
     
     docs_resp = supabase.table("documents").select("*").eq("visit_id", id).execute()
-    visit["documents"] = docs_resp.data
+    visit["documents"] = [sign_and_parse_document(d) for d in docs_resp.data]
     
     conds_resp = supabase.table("visit_conditions").select("condition_id, conditions(*)").eq("visit_id", id).execute()
     visit["conditions"] = [c["conditions"] for c in conds_resp.data if c.get("conditions")]
@@ -86,7 +134,8 @@ def update_visit(
     hospital_or_clinic: str = Form(None),
     specialty: str = Form(None),
     reason: str = Form(None),
-    echs_referred: bool = Form(None)
+    echs_referred: bool = Form(None),
+    condition_ids: str = Form(None)
 ):
     update_data = {}
     if date is not None: update_data["date"] = date
@@ -96,11 +145,19 @@ def update_visit(
     if reason is not None: update_data["reason"] = reason
     if echs_referred is not None: update_data["echs_referred"] = echs_referred
     
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update")
+    if update_data:
+        supabase.table("visits").update(update_data).eq("id", id).execute()
         
-    resp = supabase.table("visits").update(update_data).eq("id", id).execute()
-    return resp.data
+    if condition_ids is not None:
+        supabase.table("visit_conditions").delete().eq("visit_id", id).execute()
+        ids = [cid.strip() for cid in condition_ids.split(",") if cid.strip()]
+        for cid in ids:
+            supabase.table("visit_conditions").insert({
+                "visit_id": id,
+                "condition_id": cid
+            }).execute()
+            
+    return get_visit(id)
 
 @app.delete("/visits/{id}")
 def delete_visit(id: str):
@@ -144,9 +201,11 @@ def create_visit(
 
 @app.post("/documents")
 async def upload_document(
-    visit_id: str = Form(...),
     type: str = Form(...),
+    visit_id: str = Form(None),
     notes: str = Form(None),
+    date: str = Form(None),
+    condition_ids: str = Form(None),
     file: UploadFile = File(...)
 ):
     file_bytes = await file.read()
@@ -158,19 +217,36 @@ async def upload_document(
 
     file_url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/documents/{file_name}"
 
+    db_notes = notes
+    if not visit_id:
+        cids = [cid.strip() for cid in condition_ids.split(",") if cid.strip()] if condition_ids else []
+        db_notes = json.dumps({
+            "date": date or "",
+            "condition_ids": cids,
+            "notes": notes or ""
+        })
+
     doc_data = {
-        "visit_id": visit_id,
         "type": type,
         "file_url": file_url,
-        "notes": notes
+        "notes": db_notes
     }
+    if visit_id:
+        doc_data["visit_id"] = visit_id
+
     response = supabase.table("documents").insert(doc_data).execute()
-    return response.data
+    doc = sign_and_parse_document(response.data[0])
+    return [doc]
 
 @app.get("/documents/{visit_id}")
 def get_documents(visit_id: str):
     response = supabase.table("documents").select("*").eq("visit_id", visit_id).execute()
-    return response.data
+    return [sign_and_parse_document(d) for d in response.data]
+
+@app.get("/standalone-documents")
+def get_standalone_documents():
+    response = supabase.table("documents").select("*").is_("visit_id", "null").execute()
+    return [sign_and_parse_document(d) for d in response.data]
 
 @app.delete("/documents/{id}")
 def delete_document(id: str):
