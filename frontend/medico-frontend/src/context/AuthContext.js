@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import axios from 'axios';
 
@@ -10,6 +10,14 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Keep a mutable ref of the session token so the fetch/axios interceptors 
+  // can access it synchronously without triggering race conditions or recursions.
+  const tokenRef = useRef(null);
+
+  useEffect(() => {
+    tokenRef.current = session?.access_token || null;
+  }, [session]);
 
   useEffect(() => {
     // 1. Get initial session
@@ -29,16 +37,18 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Global Authorization Interceptor for Fetch
+  // 3. Global Authorization Interceptor for Fetch (Synchronous & Recursion-free)
   useEffect(() => {
     const originalFetch = window.originalFetch || window.fetch;
     window.originalFetch = originalFetch;
 
     window.fetch = async (url, options = {}) => {
-      const currentSession = await supabase.auth.getSession();
-      const token = currentSession?.data?.session?.access_token;
+      const token = tokenRef.current;
       
-      if (token) {
+      // Do not append auth token to Supabase Auth endpoints directly to prevent issues
+      const isSupabaseAuth = typeof url === 'string' && url.includes('/auth/v1/');
+      
+      if (token && !isSupabaseAuth) {
         options.headers = {
           ...options.headers,
           'Authorization': `Bearer ${token}`,
@@ -48,11 +58,10 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // 4. Global Authorization Interceptor for Axios
+  // 4. Global Authorization Interceptor for Axios (Synchronous)
   useEffect(() => {
-    const interceptor = axios.interceptors.request.use(async (config) => {
-      const currentSession = await supabase.auth.getSession();
-      const token = currentSession?.data?.session?.access_token;
+    const interceptor = axios.interceptors.request.use((config) => {
+      const token = tokenRef.current;
       if (token) {
         config.headers['Authorization'] = `Bearer ${token}`;
       }
@@ -76,7 +85,17 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    try {
+      // Force local logout states first for immediate UI responsiveness
+      setSession(null);
+      setUser(null);
+      tokenRef.current = null;
+      
+      // Call Supabase signOut
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Supabase signOut error:", err);
+    }
   };
 
   const value = {
