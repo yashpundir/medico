@@ -38,6 +38,7 @@ export default function VisitList() {
       .catch(err => console.error("Failed to load conditions", err));
 
     fetchVisits();
+    fetchDocuments();
   }, []);
 
   useEffect(() => {
