@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -22,6 +22,29 @@ supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_SECRET_KEY")
 )
+
+def get_db(authorization: str = Header(None)) -> Client:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid token format")
+    token = authorization.split(" ")[1]
+    try:
+        # Verify the session token using the master secret key client
+        user_resp = supabase.auth.get_user(token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=401, detail="Invalid or expired session token")
+        
+        # Create a request-scoped client using the publishable key or secret key
+        # and authenticate it with the user's JWT so RLS policies apply.
+        user_client = create_client(
+            os.getenv("SUPABASE_URL"),
+            os.getenv("SUPABASE_PUBLISHABLE_KEY") or os.getenv("SUPABASE_SECRET_KEY")
+        )
+        user_client.postgrest.auth(token)
+        return user_client
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 def sign_document_url(doc: dict) -> dict:
     if doc.get("file_url"):
@@ -55,16 +78,16 @@ def root():
 # --- CONDITIONS ---
 
 @app.get("/conditions")
-def get_conditions():
-    response = supabase.table("conditions").select("*").execute()
+def get_conditions(db: Client = Depends(get_db)):
+    response = db.table("conditions").select("*").execute()
     return response.data
 
 @app.post("/conditions")
-def create_condition(name: str = Form(...), status: str = Form("active"), diagnosed_on: str = Form(None)):
+def create_condition(name: str = Form(...), status: str = Form("active"), diagnosed_on: str = Form(None), db: Client = Depends(get_db)):
     data = {"name": name, "status": status}
     if diagnosed_on:
         data["diagnosed_on"] = diagnosed_on
-    response = supabase.table("conditions").insert(data).execute()
+    response = db.table("conditions").insert(data).execute()
     return response.data
 
 @app.put("/conditions/{id}")
@@ -72,7 +95,8 @@ def update_condition(
     id: str,
     name: str = Form(None),
     status: str = Form(None),
-    diagnosed_on: str = Form(None)
+    diagnosed_on: str = Form(None),
+    db: Client = Depends(get_db)
 ):
     update_data = {}
     if name is not None: update_data["name"] = name
@@ -82,46 +106,50 @@ def update_condition(
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
         
-    resp = supabase.table("conditions").update(update_data).eq("id", id).execute()
+    resp = db.table("conditions").update(update_data).eq("id", id).execute()
     return resp.data
 
 @app.delete("/conditions/{id}")
-def delete_condition(id: str):
-    resp = supabase.table("conditions").delete().eq("id", id).execute()
+def delete_condition(id: str, db: Client = Depends(get_db)):
+    resp = db.table("conditions").delete().eq("id", id).execute()
     return resp.data
 
 
 # --- VISITS ---
 
 @app.get("/visits")
-def get_visits(condition_id: str = None, doctor: str = None):
-    query = supabase.table("visits").select("*")
+def get_visits(condition_id: str = None, doctor: str = None, db: Client = Depends(get_db)):
+    query = db.table("visits").select("*")
     if doctor:
         query = query.ilike("doctor_name", f"%{doctor}%")
     response = query.order("date", desc=True).execute()
     visits = response.data
     
     if condition_id:
-        vc_response = supabase.table("visit_conditions").select("visit_id").eq("condition_id", condition_id).execute()
+        vc_response = db.table("visit_conditions").select("visit_id").eq("condition_id", condition_id).execute()
         valid_visit_ids = {vc["visit_id"] for vc in vc_response.data}
         visits = [v for v in visits if v["id"] in valid_visit_ids]
         
     return visits
 
 @app.get("/visits/{id}")
-def get_visit(id: str):
-    visit_resp = supabase.table("visits").select("*").eq("id", id).execute()
+def get_visit_endpoint(id: str, db: Client = Depends(get_db)):
+    return get_visit(id, db)
+
+def get_visit(id: str, db: Client = None):
+    client = db if db is not None else supabase
+    visit_resp = client.table("visits").select("*").eq("id", id).execute()
     if not visit_resp.data:
         raise HTTPException(status_code=404, detail="Visit not found")
     visit = visit_resp.data[0]
     
-    docs_resp = supabase.table("documents").select("*").eq("visit_id", id).execute()
+    docs_resp = client.table("documents").select("*").eq("visit_id", id).execute()
     visit["documents"] = [sign_and_parse_document(d) for d in docs_resp.data]
     
-    conds_resp = supabase.table("visit_conditions").select("condition_id, conditions(*)").eq("visit_id", id).execute()
+    conds_resp = client.table("visit_conditions").select("condition_id, conditions(*)").eq("visit_id", id).execute()
     visit["conditions"] = [c["conditions"] for c in conds_resp.data if c.get("conditions")]
     
-    meds_resp = supabase.table("medications").select("*").eq("visit_id", id).execute()
+    meds_resp = client.table("medications").select("*").eq("visit_id", id).execute()
     visit["medications"] = meds_resp.data
     
     return visit
@@ -135,7 +163,8 @@ def update_visit(
     specialty: str = Form(None),
     reason: str = Form(None),
     echs_referred: bool = Form(None),
-    condition_ids: str = Form(None)
+    condition_ids: str = Form(None),
+    db: Client = Depends(get_db)
 ):
     update_data = {}
     if date is not None: update_data["date"] = date
@@ -146,22 +175,22 @@ def update_visit(
     if echs_referred is not None: update_data["echs_referred"] = echs_referred
     
     if update_data:
-        supabase.table("visits").update(update_data).eq("id", id).execute()
+        db.table("visits").update(update_data).eq("id", id).execute()
         
     if condition_ids is not None:
-        supabase.table("visit_conditions").delete().eq("visit_id", id).execute()
+        db.table("visit_conditions").delete().eq("visit_id", id).execute()
         ids = [cid.strip() for cid in condition_ids.split(",") if cid.strip()]
         for cid in ids:
-            supabase.table("visit_conditions").insert({
+            db.table("visit_conditions").insert({
                 "visit_id": id,
                 "condition_id": cid
             }).execute()
             
-    return get_visit(id)
+    return get_visit(id, db)
 
 @app.delete("/visits/{id}")
-def delete_visit(id: str):
-    resp = supabase.table("visits").delete().eq("id", id).execute()
+def delete_visit(id: str, db: Client = Depends(get_db)):
+    resp = db.table("visits").delete().eq("id", id).execute()
     return resp.data
 
 @app.post("/visits")
@@ -172,7 +201,8 @@ def create_visit(
     specialty: str = Form(None),
     reason: str = Form(None),
     echs_referred: bool = Form(False),
-    condition_ids: str = Form(None)  # comma separated UUIDs
+    condition_ids: str = Form(None),  # comma separated UUIDs
+    db: Client = Depends(get_db)
 ):
     visit_data = {
         "date": date,
@@ -182,14 +212,14 @@ def create_visit(
         "reason": reason,
         "echs_referred": echs_referred
     }
-    visit_response = supabase.table("visits").insert(visit_data).execute()
+    visit_response = db.table("visits").insert(visit_data).execute()
     visit = visit_response.data[0]
     visit_id = visit["id"]
 
     if condition_ids:
         ids = [cid.strip() for cid in condition_ids.split(",") if cid.strip()]
         for cid in ids:
-            supabase.table("visit_conditions").insert({
+            db.table("visit_conditions").insert({
                 "visit_id": visit_id,
                 "condition_id": cid
             }).execute()
@@ -206,13 +236,15 @@ async def upload_document(
     notes: str = Form(None),
     date: str = Form(None),
     condition_ids: str = Form(None),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    db: Client = Depends(get_db)
 ):
     file_bytes = await file.read()
     file_ext = file.filename.split(".")[-1]
     file_name = f"{uuid.uuid4()}.{file_ext}"
     storage_path = f"documents/{file_name}"
 
+    # Verify and upload to private storage
     supabase.storage.from_("documents").upload(storage_path, file_bytes, {"content-type": file.content_type})
 
     file_url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/documents/{file_name}"
@@ -234,23 +266,23 @@ async def upload_document(
     if visit_id:
         doc_data["visit_id"] = visit_id
 
-    response = supabase.table("documents").insert(doc_data).execute()
+    response = db.table("documents").insert(doc_data).execute()
     doc = sign_and_parse_document(response.data[0])
     return [doc]
 
 @app.get("/documents/{visit_id}")
-def get_documents(visit_id: str):
-    response = supabase.table("documents").select("*").eq("visit_id", visit_id).execute()
+def get_documents(visit_id: str, db: Client = Depends(get_db)):
+    response = db.table("documents").select("*").eq("visit_id", visit_id).execute()
     return [sign_and_parse_document(d) for d in response.data]
 
 @app.get("/standalone-documents")
-def get_standalone_documents():
-    response = supabase.table("documents").select("*").is_("visit_id", "null").execute()
+def get_standalone_documents(db: Client = Depends(get_db)):
+    response = db.table("documents").select("*").is_("visit_id", "null").execute()
     return [sign_and_parse_document(d) for d in response.data]
 
 @app.delete("/documents/{id}")
-def delete_document(id: str):
-    doc_resp = supabase.table("documents").select("file_url").eq("id", id).execute()
+def delete_document(id: str, db: Client = Depends(get_db)):
+    doc_resp = db.table("documents").select("file_url").eq("id", id).execute()
     if not doc_resp.data:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -262,14 +294,14 @@ def delete_document(id: str):
         except Exception as e:
             print(f"Failed to delete file from storage: {e}")
         
-    resp = supabase.table("documents").delete().eq("id", id).execute()
+    resp = db.table("documents").delete().eq("id", id).execute()
     return {"message": "Document deleted"}
 
 # --- MEDICATIONS ---
 
 @app.get("/medications")
-def get_medications():
-    resp = supabase.table("medications").select("*, visits(date, doctor_name), conditions(name)").order("created_at", desc=True).execute()
+def get_medications(db: Client = Depends(get_db)):
+    resp = db.table("medications").select("*, visits(date, doctor_name), conditions(name)").order("created_at", desc=True).execute()
     return resp.data
 
 @app.post("/medications")
@@ -282,7 +314,8 @@ def create_medication(
     prescribed_until: str = Form(None),
     prescribed_by: str = Form(None),
     status: str = Form("ongoing"),
-    condition_id: str = Form(None)
+    condition_id: str = Form(None),
+    db: Client = Depends(get_db)
 ):
     med_data = {
         "visit_id": visit_id,
@@ -297,5 +330,5 @@ def create_medication(
     if condition_id:
         med_data["condition_id"] = condition_id
         
-    resp = supabase.table("medications").insert(med_data).execute()
+    resp = db.table("medications").insert(med_data).execute()
     return resp.data

@@ -1,9 +1,11 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Activity, ClipboardList, Pill } from 'lucide-react';
+import { Activity, ClipboardList, Pill, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
   const location = useLocation();
+  const { logout } = useAuth();
   
   const navItems = [
     { name: 'Visits', path: '/', icon: ClipboardList },
@@ -44,6 +46,17 @@ export default function Layout() {
                 })}
               </div>
             </div>
+            
+            {/* Desktop Logout Button */}
+            <div className="hidden sm:flex sm:items-center">
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-semibold rounded-lg text-slate-700 bg-white hover:bg-slate-50 transition-colors gap-1.5"
+              >
+                <LogOut className="w-3.5 h-3.5 text-slate-500" />
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
         
@@ -67,6 +80,14 @@ export default function Layout() {
                </Link>
              )
            })}
+           {/* Mobile Logout Button */}
+           <button
+             onClick={logout}
+             className="flex-shrink-0 inline-flex items-center px-3 py-2 rounded-md text-sm font-medium border border-red-200 text-red-700 bg-red-50/50 hover:bg-red-50 transition-colors"
+           >
+             <LogOut className="w-4 h-4 mr-2" />
+             Sign Out
+           </button>
         </div>
       </nav>
 
