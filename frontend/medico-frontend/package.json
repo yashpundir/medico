@@ -2,6 +2,9 @@
   "name": "medico-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.11.0"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
     "@testing-library/dom": "^10.4.1",
