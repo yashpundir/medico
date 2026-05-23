@@ -36,14 +36,33 @@ export default function VisitDetail() {
     fetchVisit();
     // Load all conditions for editing dropdowns
     fetch(`${process.env.REACT_APP_API_URL}/conditions`)
-      .then(res => res.json())
-      .then(data => setAllConditions(data || []))
-      .catch(err => console.error("Error fetching conditions directory", err));
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load conditions: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
+      .then(data => {
+        // Defensive check: ensure data is an array
+        const conditionsData = Array.isArray(data) ? data : [];
+        setAllConditions(conditionsData);
+      })
+      .catch(err => {
+        console.error("Error fetching conditions directory", err);
+        setAllConditions([]);
+      });
   }, [id]);
 
   const fetchVisit = () => {
     fetch(`${process.env.REACT_APP_API_URL}/visits/${id}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load visit: ${res.status}`);
+          return null;
+        }
+        return res.json();
+      })
       .then(data => {
         setVisit(data);
         setLoading(false);
@@ -60,6 +79,7 @@ export default function VisitDetail() {
       })
       .catch(err => {
         console.error("Error fetching visit detail:", err);
+        setVisit(null);
         setLoading(false);
       });
   };

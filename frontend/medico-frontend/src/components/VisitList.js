@@ -30,10 +30,18 @@ export default function VisitList() {
     }
     
     fetch(`${process.env.REACT_APP_API_URL}/conditions`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load conditions: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
       .then(data => {
-        setConditions(data || []);
-        cache.set('conditions', data || []);
+        // Defensive check: ensure data is an array
+        const conditionsData = Array.isArray(data) ? data : [];
+        setConditions(conditionsData);
+        cache.set('conditions', conditionsData);
       })
       .catch(err => console.error("Failed to load conditions", err));
 
@@ -57,14 +65,23 @@ export default function VisitList() {
     }
 
     fetch(`${process.env.REACT_APP_API_URL}/visits`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load visits: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
       .then(data => {
-        setVisits(data || []);
-        cache.set('visits', data || []);
+        // Defensive check: ensure data is an array
+        const visitsData = Array.isArray(data) ? data : [];
+        setVisits(visitsData);
+        cache.set('visits', visitsData);
         setLoadingVisits(false);
       })
       .catch(err => {
         console.error("Failed to load visits", err);
+        setVisits([]);
         setLoadingVisits(false);
       });
   };
@@ -79,14 +96,23 @@ export default function VisitList() {
     }
 
     fetch(`${process.env.REACT_APP_API_URL}/standalone-documents`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load documents: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
       .then(data => {
-        setDocuments(data || []);
-        cache.set('standaloneDocs', data || []);
+        // Defensive check: ensure data is an array
+        const docsData = Array.isArray(data) ? data : [];
+        setDocuments(docsData);
+        cache.set('standaloneDocs', docsData);
         setLoadingDocs(false);
       })
       .catch(err => {
         console.error("Failed to load standalone documents", err);
+        setDocuments([]);
         setLoadingDocs(false);
       });
   };

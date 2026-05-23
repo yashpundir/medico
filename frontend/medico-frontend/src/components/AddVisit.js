@@ -27,12 +27,23 @@ export default function AddVisit() {
       setConditions(cachedConditions);
     }
     fetch(`${process.env.REACT_APP_API_URL}/conditions`)
-      .then(res => res.json())
-      .then(data => {
-        setConditions(data || []);
-        cache.set('conditions', data || []);
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load conditions: ${res.status}`);
+          return [];
+        }
+        return res.json();
       })
-      .catch(err => console.error("Failed to load conditions:", err));
+      .then(data => {
+        // Defensive check: ensure data is an array
+        const conditionsData = Array.isArray(data) ? data : [];
+        setConditions(conditionsData);
+        cache.set('conditions', conditionsData);
+      })
+      .catch(err => {
+        console.error("Failed to load conditions:", err);
+        setConditions([]);
+      });
   }, []);
 
   const handleDocChange = (index, field, value) => {

@@ -17,14 +17,23 @@ export default function MedicationList() {
     }
 
     fetch(`${process.env.REACT_APP_API_URL}/medications`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load medications: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
       .then(data => {
-        setMedications(data || []);
-        cache.set('medications', data || []);
+        // Defensive check: ensure data is an array
+        const medsData = Array.isArray(data) ? data : [];
+        setMedications(medsData);
+        cache.set('medications', medsData);
         setLoading(false);
       })
       .catch(err => {
         console.error("Failed to load medications", err);
+        setMedications([]);
         setLoading(false);
       });
   }, []);

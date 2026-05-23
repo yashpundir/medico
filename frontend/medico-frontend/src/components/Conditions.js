@@ -35,14 +35,23 @@ export default function Conditions() {
     }
 
     fetch(`${process.env.REACT_APP_API_URL}/conditions`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.error(`Failed to load conditions: ${res.status}`);
+          return [];
+        }
+        return res.json();
+      })
       .then(data => {
-        setConditions(data || []);
-        cache.set('conditions', data || []);
+        // Defensive check: ensure data is an array
+        const conditionsData = Array.isArray(data) ? data : [];
+        setConditions(conditionsData);
+        cache.set('conditions', conditionsData);
         setLoading(false);
       })
       .catch(err => {
         console.error("Error fetching conditions:", err);
+        setConditions([]);
         setLoading(false);
       });
   };

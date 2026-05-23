@@ -16,5 +16,11 @@ export default function PrivateRoute({ children }) {
     );
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  // Always render the login page if not authenticated
+  // This ensures the page never shows blank/white
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 }
